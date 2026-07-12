@@ -1,0 +1,48 @@
+name: Unpack bitchat-main.zip
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download zip from repo (if needed)
+        run: |
+          # если файл уже в repo root, закомментируйте строки ниже
+          if [ ! -f "bitchat-main.zip" ]; then
+            curl -L -o bitchat-main.zip "https://github.com/terminaldetector/prBIAD/raw/main/bitchat-main.zip"
+          fi
+
+      - name: Unpack zip
+        run: |
+          if [ -f "bitchat-main.zip" ]; then
+            unzip -o bitchat-main.zip -d .
+            # переместить содержимое в корень, включая dotfiles
+            shopt -s dotglob || true
+            if [ -d "bitchat-main" ]; then
+              mv -v bitchat-main/* . || true
+              mv -v bitchat-main/.* . 2>/dev/null || true
+              rmdir bitchat-main || true
+            fi
+          else
+            echo "bitchat-main.zip not found"
+            exit 1
+          fi
+
+      - name: Commit and push
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          git config user.name "$GIT_AUTHOR_NAME"
+          git config user.email "$GIT_AUTHOR_EMAIL"
+          git add -A
+          git diff --cached --quiet || (git commit -m "Unpack bitchat-main.zip" && git push)
