@@ -210,6 +210,61 @@ def test_distributed_bridge() -> None:
     print("  ring (2 nodes, bridge backend on last stage): {!r}".format(out))
 
 
+def _shard_json(shard) -> str:
+    return json.dumps({
+        "model_id": shard.model_card.model_id,
+        "device_rank": shard.device_rank,
+        "world_size": shard.world_size,
+        "start_layer": shard.start_layer,
+        "end_layer": shard.end_layer,
+        "n_layers": shard.n_layers,
+        "is_first_layer": shard.is_first_layer,
+        "is_last_layer": shard.is_last_layer,
+    })
+
+
+async def _sharded_split():
+    from exo_core.inference.sharded import NumericShardRunner, ShardedPipeline
+
+    ring = ["A", "B"]
+    card = ModelCard(model_id="demo-llm", n_layers=6, storage_size=Memory.from_gb(2))
+    node_memory = {
+        NodeId("A"): MemoryUsage(ram_available=Memory.from_gb(8)),
+        NodeId("B"): MemoryUsage(ram_available=Memory.from_gb(4)),
+    }
+    assigns = get_shard_assignments(card, Cycle([NodeId("A"), NodeId("B")]), Sharding.Pipeline, node_memory)
+
+    bus = {}
+    pipes = {}
+    bands = {}
+    for nid in ring:
+        shard = assigns.shard_for_node(NodeId(nid))
+        bands[nid] = (shard.start_layer, shard.end_layer)
+        runner = NumericShardRunner()
+        runner.load(_shard_json(shard))
+        pipe = ShardedPipeline(nid, InMemoryMeshNetwork(nid, bus), ring, runner, coordinator="A", max_new_tokens=3)
+        pipes[nid] = pipe
+
+    b_task = asyncio.ensure_future(pipes["B"].run_forever())
+    try:
+        tokens = await pipes["A"].generate(prompt_token_ids=[1])
+    finally:
+        pipes["B"].stop()
+        b_task.cancel()
+    return tokens, bands
+
+
+def test_sharded_split() -> None:
+    tokens, bands = asyncio.run(_sharded_split())
+    # A owns layers [0,4), B owns [4,6): 6 layers total. Each generated token is the
+    # previous seed advanced by ALL 6 layers -> +6 per step. Seed = 1 -> 7, 13, 19.
+    # This only holds if BOTH devices ran their band (A:+4, B:+2).
+    assert bands["A"] == (0, 4) and bands["B"] == (4, 6), bands
+    assert tokens == [7, 13, 19], tokens
+    print("  layer split A{}+B{} -> tokens {} (each +6 = both shards ran)".format(
+        bands["A"], bands["B"], tokens))
+
+
 def main() -> None:
     print("exo-core self-test")
     print("[1] partitioning")
@@ -226,6 +281,8 @@ def main() -> None:
     test_bridge_backend()
     print("[7] distributed ring over bridge backend")
     test_distributed_bridge()
+    print("[8] TRUE layer-sharded split (activation-passing ring)")
+    test_sharded_split()
     print("ALL PASSED")
 
 

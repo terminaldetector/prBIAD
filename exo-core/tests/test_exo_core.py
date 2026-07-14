@@ -36,3 +36,7 @@ def test_bridge_backend():
 
 def test_distributed_bridge():
     selftest.test_distributed_bridge()
+
+
+def test_sharded_split():
+    selftest.test_sharded_split()

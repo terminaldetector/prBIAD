@@ -54,8 +54,10 @@ See [`../INTEGRATION.md`](../INTEGRATION.md) for the full Saturn Mask wiring
 
 - **Real inference** — the **bridge backend** (`BridgeBuilder`/`BridgeEngine`) runs models
   on a host Kotlin runtime (LiteRT/TFLite/ONNX); MLX is removed. `EchoEngine` remains the
-  dependency-free reference. See [`BACKENDS.md`](BACKENDS.md), including the layer-sharding
-  caveat for mobile runtimes.
+  dependency-free reference. See [`BACKENDS.md`](BACKENDS.md).
+- **True layer-splitting across devices** — the ring activation-passing pipeline is
+  implemented in `exo_core.inference.sharded` (see [`SHARDING.md`](SHARDING.md)); the
+  remaining host work is exporting per-shard sub-models + a `ShardBackend`.
 - **Real transport** — the concrete mesh is `bitchat-core` (Kotlin) via the adapter; the
   Zenoh/`exo_rs` layer is removed.
 - **Model downloads, HTTP API, election/daemon, disaggregated KV-cache** — removed.

@@ -6,6 +6,7 @@ the same frames travel over the in-memory bus or the Bluetooth mesh.
 
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -18,6 +19,9 @@ class MsgType(str, Enum):
     PROMPT = "PROMPT"       # stage -> next stage: activations (prompt text for echo)
     TOKEN = "TOKEN"         # last stage -> coordinator: an output token
     DONE = "DONE"           # last stage -> coordinator: generation finished
+    # --- true layer-sharded pipeline (see sharded.py / SHARDING.md) ---
+    ACTIVATION = "ACTIVATION"  # stage i -> stage i+1: hidden-state tensor blob
+    FEED = "FEED"              # last stage -> first stage: sampled token id (ring)
 
 
 @dataclass
@@ -60,3 +64,20 @@ def token(task_id: str, text: str) -> Message:
 
 def done(task_id: str) -> Message:
     return Message(MsgType.DONE.value, {"task_id": task_id})
+
+
+def activation(task_id: str, step: int, blob: bytes) -> Message:
+    """Carry a hidden-state tensor between pipeline stages (base64 for JSON)."""
+    return Message(
+        MsgType.ACTIVATION.value,
+        {"task_id": task_id, "step": step, "blob": base64.b64encode(bytes(blob)).decode("ascii")},
+    )
+
+
+def activation_blob(msg: "Message") -> bytes:
+    return base64.b64decode(msg.body["blob"])
+
+
+def feed(task_id: str, step: int, token_id: int) -> Message:
+    """Send the sampled token id back to the first stage to close the ring."""
+    return Message(MsgType.FEED.value, {"task_id": task_id, "step": step, "token": int(token_id)})

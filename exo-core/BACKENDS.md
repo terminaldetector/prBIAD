@@ -77,13 +77,13 @@ default — they do not expose "run layers N..M and pass hidden state onward". S
 - **Full-model-per-node (routing)** — every device loads the whole (small) model;
   exo-core routes each request to a node. Change placement to `world_size = 1`
   rings; the partition math is bypassed. Works today.
-- **True layer-pipeline across devices** — needs **per-shard sub-models exported
-  offline** (e.g. split the ONNX/TFLite graph at layer boundaries) plus a runtime
-  path that accepts an input hidden-state tensor and emits an output hidden-state
-  tensor. The `shardJson` passed to `loadModel` (with `start_layer`/`end_layer`/
-  `is_first_layer`/`is_last_layer`) carries exactly the metadata such a backend
-  needs; ONNX Runtime is the most practical target. This is future work — the
-  reference `LiteRtLlmBackend` runs the whole model and only the last stage speaks.
+- **True layer-pipeline across devices** — the orchestration for this is now
+  **implemented** in `exo_core.inference.sharded` (`ShardedPipeline` +
+  `ShardRunner`, ring activation-passing, proven by self-test `[8]`). What remains
+  is host-side: **per-shard sub-models exported offline** (split the ONNX graph at
+  layer boundaries) plus a `ShardBackend` that runs a band of layers with
+  hidden-state I/O and a local KV cache. See **`SHARDING.md`** and
+  `integration/kotlin/ShardBackend.kt`. ONNX Runtime is the practical target.
 
 ## Verification
 

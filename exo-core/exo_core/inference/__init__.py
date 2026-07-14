@@ -19,6 +19,11 @@ from exo_core.inference.backends import (
     get_builder,
     register_backend,
 )
+from exo_core.inference.sharded import (
+    NumericShardRunner,
+    ShardedPipeline,
+    ShardRunner,
+)
 
 __all__ = [
     "Sharding",
@@ -37,4 +42,7 @@ __all__ = [
     "get_builder",
     "register_backend",
     "available_backends",
+    "ShardRunner",
+    "NumericShardRunner",
+    "ShardedPipeline",
 ]
