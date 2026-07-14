@@ -1,0 +1,10 @@
+# exo-core has NO runtime dependencies — it is pure Python standard library,
+# so it loads under Chaquopy without native wheels.
+#
+# A concrete inference backend (implementing exo_core.inference.Engine/Builder)
+# will add its own dependency, e.g. one of:
+#   - LiteRT / TensorFlow Lite (via the Kotlin side, called through a JNI engine)
+#   - onnxruntime (if a compatible Android wheel is available)
+#
+# Dev only:
+#   pytest>=7

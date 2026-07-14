@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "exo-core"
+version = "0.1.0"
+description = "Distilled, Android-portable orchestration core extracted from exo-explore/exo (for Chaquopy)."
+readme = "README.md"
+# Kept at 3.9 for the widest Chaquopy compatibility (upstream exo requires 3.13).
+requires-python = ">=3.9"
+dependencies = []   # stdlib only — no MLX / Zenoh / rustworkx / pydantic / fastapi
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["exo_core*"]
