@@ -21,7 +21,7 @@ class WebScraperSkillImpl : Skill {
                 .get()
 
             val elements = doc.select(selector)
-            if (elements.isEmpty) {
+            if (elements.isEmpty()) {
                 return SkillResult.error("No content found for selector: $selector")
             }
 
