@@ -14,7 +14,9 @@ Exercises the four distilled subsystems:
 from __future__ import annotations
 
 import asyncio
+import json
 
+from exo_core.inference.backends import available_backends, get_builder
 from exo_core.inference.engine import Chunk, EchoBuilder, GenerationTask
 from exo_core.inference.shards import Sharding
 from exo_core.inference.sharder import get_shard_assignments
@@ -24,6 +26,40 @@ from exo_core.shared.topology import Cycle
 from exo_core.shared.types import Memory, MemoryUsage, ModelCard, NodeId
 from exo_core.topology.partition import allocate_layers_proportionally
 from exo_core.worker.runner import Runner
+
+
+class FakeHostRunner:
+    """Pure-Python stand-in for a Kotlin ``InferenceBackend`` (LiteRT/TFLite/ONNX).
+
+    Echoes the prompt token-by-token via the same JSON ``poll()`` contract the real
+    host runtime uses, so the bridge backend is exercised without a native runtime.
+    """
+
+    def __init__(self) -> None:
+        self.loaded = None
+        self._pending = {}
+
+    def loadModel(self, model_path, shard_json):  # noqa: N802 (host naming)
+        self.loaded = (model_path, json.loads(shard_json))
+
+    def submit(self, task_id, prompt, max_tokens):
+        self._pending[task_id] = prompt.split()[:max_tokens]
+
+    def poll(self):
+        out = []
+        for tid, toks in list(self._pending.items()):
+            if toks:
+                out.append({"task_id": tid, "text": toks.pop(0) + " ", "finished": False})
+            else:
+                out.append({"task_id": tid, "text": "", "finished": True})
+                del self._pending[tid]
+        return json.dumps(out)
+
+    def cancel(self, task_id):
+        self._pending.pop(task_id, None)
+
+    def close(self):
+        self._pending.clear()
 
 
 def test_partition() -> None:
@@ -99,6 +135,81 @@ def test_distributed() -> None:
     print("  ring (2 nodes, pipeline over mesh): {!r}".format(out))
 
 
+def test_backend_registry() -> None:
+    backends = available_backends()
+    for expected in ("echo", "bridge", "litert", "tflite", "onnx"):
+        assert expected in backends, backends
+    try:
+        get_builder("bridge")  # missing runner must fail loudly
+        raise AssertionError("expected ValueError for bridge without runner")
+    except ValueError:
+        pass
+    print("  registry: {}".format(backends))
+
+
+def test_bridge_backend() -> None:
+    card = ModelCard(model_id="demo-llm", n_layers=2, storage_size=Memory(), model_path="/data/model.task")
+    cycle = Cycle([NodeId("solo")])
+    node_memory = {NodeId("solo"): MemoryUsage(ram_available=Memory.from_gb(8))}
+    shard = get_shard_assignments(card, cycle, Sharding.Pipeline, node_memory).shard_for_node(NodeId("solo"))
+
+    runner = FakeHostRunner()
+    builder = get_builder("litert", runner=runner, model_path=card.model_path)
+    builder.connect(shard)
+    list(builder.load(shard))
+    engine = builder.build()
+    engine.warmup()
+    engine.submit(GenerationTask(prompt="alpha beta gamma", task_id="t1"))
+
+    collected = []
+    for _ in range(30):
+        finished = False
+        for _tid, chunk in engine.step():
+            if chunk.finished:
+                finished = True
+            elif chunk.text:
+                collected.append(chunk.text)
+        if finished:
+            break
+    engine.close()
+
+    out = "".join(collected).strip()
+    assert out == "alpha beta gamma", repr(out)
+    assert runner.loaded is not None and runner.loaded[0] == "/data/model.task", runner.loaded
+    assert runner.loaded[1]["is_last_layer"] is True, runner.loaded[1]
+    print("  bridge backend (host runtime via LiteRT alias): {!r}".format(out))
+
+
+async def _distributed_bridge() -> str:
+    bus = {}
+    coordinator = ExoNode(
+        "nodeA", InMemoryMeshNetwork("nodeA", bus), Memory.from_gb(8),
+        builder=get_builder("litert", runner=FakeHostRunner()),
+    )
+    satellite = ExoNode(
+        "nodeB", InMemoryMeshNetwork("nodeB", bus), Memory.from_gb(4),
+        builder=get_builder("litert", runner=FakeHostRunner()),
+    )
+    await coordinator.announce()
+    await satellite.announce()
+    sat_task = asyncio.ensure_future(satellite.run_forever())
+    try:
+        card = ModelCard(
+            model_id="demo-llm", n_layers=6, storage_size=Memory.from_gb(2),
+            model_path="/data/demo.task",
+        )
+        return await coordinator.generate(card, "one two three", Sharding.Pipeline)
+    finally:
+        satellite.stop()
+        sat_task.cancel()
+
+
+def test_distributed_bridge() -> None:
+    out = asyncio.run(_distributed_bridge())
+    assert out == "one two three", repr(out)
+    print("  ring (2 nodes, bridge backend on last stage): {!r}".format(out))
+
+
 def main() -> None:
     print("exo-core self-test")
     print("[1] partitioning")
@@ -109,6 +220,12 @@ def main() -> None:
     test_runner()
     print("[4] distributed ring generation")
     test_distributed()
+    print("[5] backend registry")
+    test_backend_registry()
+    print("[6] bridge backend (LiteRT/TFLite/ONNX host runtime)")
+    test_bridge_backend()
+    print("[7] distributed ring over bridge backend")
+    test_distributed_bridge()
     print("ALL PASSED")
 
 

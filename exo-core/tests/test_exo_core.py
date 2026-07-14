@@ -24,3 +24,15 @@ def test_runner():
 
 def test_distributed():
     selftest.test_distributed()
+
+
+def test_backend_registry():
+    selftest.test_backend_registry()
+
+
+def test_bridge_backend():
+    selftest.test_bridge_backend()
+
+
+def test_distributed_bridge():
+    selftest.test_distributed_bridge()

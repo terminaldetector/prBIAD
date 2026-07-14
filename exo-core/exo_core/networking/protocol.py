@@ -38,8 +38,16 @@ def announce(node_id: str, memory_bytes: int) -> Message:
     return Message(MsgType.ANNOUNCE.value, {"node_id": node_id, "memory": memory_bytes})
 
 
-def assign(ring: List[str], model_id: str, shard: Dict[str, Any]) -> Message:
-    return Message(MsgType.ASSIGN.value, {"ring": ring, "model_id": model_id, "shard": shard})
+def assign(
+    ring: List[str],
+    model_id: str,
+    shard: Dict[str, Any],
+    model_path: str = "",
+) -> Message:
+    return Message(
+        MsgType.ASSIGN.value,
+        {"ring": ring, "model_id": model_id, "model_path": model_path, "shard": shard},
+    )
 
 
 def prompt(task_id: str, coordinator: str, text: str) -> Message:

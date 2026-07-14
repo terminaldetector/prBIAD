@@ -11,6 +11,14 @@ from exo_core.inference.shards import (
 )
 from exo_core.inference.sharder import get_shard_assignments
 from exo_core.inference.engine import Builder, Engine, GenerationTask, EchoEngine
+from exo_core.inference.backends import (
+    BridgeBuilder,
+    BridgeEngine,
+    HostLlmRunner,
+    available_backends,
+    get_builder,
+    register_backend,
+)
 
 __all__ = [
     "Sharding",
@@ -23,4 +31,10 @@ __all__ = [
     "Builder",
     "GenerationTask",
     "EchoEngine",
+    "BridgeBuilder",
+    "BridgeEngine",
+    "HostLlmRunner",
+    "get_builder",
+    "register_backend",
+    "available_backends",
 ]

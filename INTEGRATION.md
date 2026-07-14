@@ -47,10 +47,13 @@ implemented in Kotlin (`bitchat-core`), and exo's Python calls it through a thin
 1. **Python version.** Upstream exo needs **3.13**; Chaquopy supports up to **3.12**.
    `exo-core` is written to `requires-python >= 3.9` (stdlib only) specifically to sidestep
    this. Keep any future additions 3.9-compatible.
-2. **No Android inference engine exists in exo.** Exo's only engines are **MLX** (Apple).
-   Distributed inference on Android needs a new backend implementing
-   `exo_core.inference.Engine`/`Builder` on **LiteRT/TFLite** (Saturn Mask already depends on
-   `tensorflow-lite`) or ONNX Runtime. Until then `EchoEngine` proves the plumbing only.
+2. **Android inference backend** — addressed by the **bridge backend**
+   (`exo_core.inference.backends`): the `Engine`/`Builder` are implemented in Python and
+   delegate to a Kotlin `InferenceBackend` (LiteRT/TFLite/ONNX). Contract + reference
+   runners live in `exo-core/integration/kotlin/`; details and the layer-sharding caveat are
+   in `exo-core/BACKENDS.md`. Remaining app-side work: instantiate a runtime, ship a model
+   file, and (for cross-device layer-pipeline) export per-shard sub-models. LiteRT LLM API is
+   the recommended turnkey path; TFLite is already an app dependency.
 3. **Build-system mismatch.** `app/` is AGP **8.2.2** / Kotlin **1.9.22** / compileSdk **34**;
    `bitchat-core` is AGP **8.10** / Kotlin **2.2** / compileSdk **35**. To include
    `bitchat-core` as a Gradle module you must bump the app toolchain (recommended:
@@ -121,14 +124,21 @@ class ExoBridge(private val context: android.content.Context, private val meshBr
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private lateinit var node: com.chaquo.python.PyObject
 
-    fun start(nodeId: String, memoryGb: Double) {
+    fun start(nodeId: String, memoryGb: Double, inference: InferenceBackend, modelPath: String) {
         if (!Python.isStarted()) Python.start(AndroidPlatform(context))
         val py = Python.getInstance()
         val adapter = py.getModule("exo_core.networking")
             .callAttr("BitChatNetworkAdapter", meshBridge)
         val mem = py.getModule("exo_core.shared.types")
             .get("Memory")!!.callAttr("from_gb", memoryGb)
-        node = py.getModule("exo_core.node").callAttr("ExoNode", nodeId, adapter, mem)
+        // Choose the inference backend (LiteRT/TFLite/ONNX) via the bridge.
+        // get_builder(name, **opts) takes keyword-only opts -> use Chaquopy Kwarg:
+        //   import com.chaquo.python.Kwarg
+        val builder = py.getModule("exo_core.inference.backends").callAttr(
+            "get_builder", "litert",
+            Kwarg("runner", inference), Kwarg("model_path", modelPath)
+        )
+        node = py.getModule("exo_core.node").callAttr("ExoNode", nodeId, adapter, mem, builder)
     }
 
     suspend fun inferOnCluster(prompt: String): String = withContext(Dispatchers.Default) {

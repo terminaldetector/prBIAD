@@ -85,7 +85,12 @@ class ExoNode:
     def _handle_assign(self, msg: proto.Message) -> None:
         self._ring = list(msg.body["ring"])
         s = msg.body["shard"]
-        card = ModelCard(model_id=msg.body["model_id"], n_layers=s["n_layers"], storage_size=Memory())
+        card = ModelCard(
+            model_id=msg.body["model_id"],
+            n_layers=s["n_layers"],
+            storage_size=Memory(),
+            model_path=msg.body.get("model_path") or None,
+        )
         self._shard = PipelineShardMetadata(
             model_card=card,
             device_rank=s["device_rank"],
@@ -181,7 +186,10 @@ class ExoNode:
                 "end_layer": shard.end_layer,
                 "n_layers": shard.n_layers,
             }
-            self._outbox.append((str(nid), proto.assign(ring, model_card.model_id, body_shard).encode()))
+            self._outbox.append((
+                str(nid),
+                proto.assign(ring, model_card.model_id, body_shard, model_card.model_path or "").encode(),
+            ))
         await self._flush()
 
         # Kick off the pipeline at the first stage.

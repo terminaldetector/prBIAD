@@ -81,9 +81,11 @@ ALL PASSED
 
 ## Remaining work to reach a functional cluster
 
-1. **A real inference backend** implementing `exo_core.inference.Engine`/`Builder` on a
-   mobile runtime (LiteRT/TFLite/ONNX). This is the single biggest gap — exo's only engines
-   are MLX.
+1. **A real inference backend** — the **bridge backend** (`exo_core.inference.backends`)
+   now provides the `Engine`/`Builder` implementation and a Kotlin `InferenceBackend`
+   contract with LiteRT/TFLite/ONNX reference runners (`integration/kotlin/`, see
+   `BACKENDS.md`). Remaining: wire a concrete model (`*.task`/`*.tflite`/`*.onnx`) in the
+   app and, for true layer-pipeline across devices, export per-shard sub-models.
 2. **Wire `BitChatNetworkAdapter` to `bitchat-core`** through the Kotlin `ExoMeshBridge`
    (see `INTEGRATION.md`).
 3. **Model provisioning** — decide how shards/weights reach each device (host app or a

@@ -15,7 +15,7 @@ Rust **`rustworkx`** graph library and **FastAPI/hypercorn**. `exo-core` keeps o
 | Module | Responsibility | Distilled from |
 |---|---|---|
 | `exo_core.topology` | Memory-weighted ring partitioning (`allocate_layers_proportionally`, cycle filtering/selection) | `exo.master.placement_utils`, `exo.master.placement` |
-| `exo_core.inference` | Shard metadata, shard assignment (pipeline/tensor), `Engine`/`Builder` ABCs + `EchoEngine` | `exo.shared.types.worker.shards`, `exo.master.placement_utils`, `exo.worker.engines.base` |
+| `exo_core.inference` | Shard metadata, shard assignment (pipeline/tensor), `Engine`/`Builder` ABCs + `EchoEngine`, and the **bridge backend** (LiteRT/TFLite/ONNX via a Kotlin runtime — see [`BACKENDS.md`](BACKENDS.md)) | `exo.shared.types.worker.shards`, `exo.master.placement_utils`, `exo.worker.engines.base` |
 | `exo_core.worker` | Runner lifecycle planner + threading-based in-process `Runner` | `exo.worker.plan`, `exo.worker.runner` |
 | `exo_core.shared` | Value types (`NodeId`, `Memory`, `ModelCard`, …), pure-Python topology graph | `exo.shared.types.*`, `exo.shared.topology` |
 | `exo_core.networking` | Abstract **`IMeshNetwork`** transport + `BitChatNetworkAdapter` + in-memory mesh | *new* (upstream has no Python mesh interface) |
@@ -52,8 +52,10 @@ See [`../INTEGRATION.md`](../INTEGRATION.md) for the full Saturn Mask wiring
 
 ## Deliberately out of scope (stubbed / abstracted)
 
-- **Real inference** — `EchoEngine` is a reference; a production backend implements
-  `exo_core.inference.Engine`/`Builder` on LiteRT/TFLite/ONNX (MLX removed).
+- **Real inference** — the **bridge backend** (`BridgeBuilder`/`BridgeEngine`) runs models
+  on a host Kotlin runtime (LiteRT/TFLite/ONNX); MLX is removed. `EchoEngine` remains the
+  dependency-free reference. See [`BACKENDS.md`](BACKENDS.md), including the layer-sharding
+  caveat for mobile runtimes.
 - **Real transport** — the concrete mesh is `bitchat-core` (Kotlin) via the adapter; the
   Zenoh/`exo_rs` layer is removed.
 - **Model downloads, HTTP API, election/daemon, disaggregated KV-cache** — removed.

@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import NewType
+from typing import NewType, Optional
 
 # In upstream ``NodeId``/``RunnerId``/``InstanceId`` are UUID-backed newtypes.
 NodeId = NewType("NodeId", str)
@@ -114,10 +114,13 @@ class Host:
 class ModelCard:
     """Minimal model descriptor (distilled from ``models.model_cards.ModelCard``).
 
-    Only the fields required by the partition/sharding logic are kept.
+    Only the fields required by the partition/sharding + backend loading logic are
+    kept. ``model_path`` is the on-device location of the weights (e.g. a path under
+    ``context.getFilesDir()`` on Android) that a backend passes to the host runtime.
     """
 
     model_id: str
     n_layers: int
     storage_size: Memory
     uses_cfg: bool = False
+    model_path: Optional[str] = None
